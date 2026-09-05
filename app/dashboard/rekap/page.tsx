@@ -10,6 +10,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
 };
@@ -27,6 +28,9 @@ type Offering = {
 export default async function RekapPage() {
   const supabase = await createClient();
 
+  // =========================
+  // CEK LOGIN
+  // =========================
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -35,7 +39,9 @@ export default async function RekapPage() {
     redirect("/login");
   }
 
-  // Ambil data blok
+  // =========================
+  // AMBIL DATA BLOK
+  // =========================
   const { data: blocks, error: blocksError } = await supabase
     .from("blocks")
     .select("id, code, name")
@@ -53,10 +59,12 @@ export default async function RekapPage() {
     );
   }
 
-  // Ambil data jemaat
+  // =========================
+  // AMBIL DATA JEMAAT
+  // =========================
   const { data: members, error: membersError } = await supabase
     .from("members")
-    .select("id, name, block_id")
+    .select("id, code, name, block_id")
     .order("name", { ascending: true });
 
   if (membersError) {
@@ -71,7 +79,9 @@ export default async function RekapPage() {
     );
   }
 
-  // Ambil seluruh transaksi persembahan
+  // =========================
+  // AMBIL DATA PERSEMBAHAN
+  // =========================
   const { data: offerings, error: offeringsError } = await supabase
     .from("offerings")
     .select("id, member_id, amount, date, note, created_at, updated_at")
@@ -89,6 +99,9 @@ export default async function RekapPage() {
     );
   }
 
+  // =========================
+  // KIRIM DATA KE CLIENT
+  // =========================
   return (
     <RekapClient
       members={(members ?? []) as Member[]}

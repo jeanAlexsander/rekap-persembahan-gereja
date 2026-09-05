@@ -10,6 +10,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
   created_at: string;
@@ -60,6 +61,7 @@ export default async function JemaatPage() {
     .select(
       `
       id,
+      code,
       name,
       block_id,
       created_at
@@ -87,6 +89,7 @@ export default async function JemaatPage() {
 
     return {
       id: member.id,
+      code: member.code,
       name: member.name,
       block_id: member.block_id,
       created_at: member.created_at,

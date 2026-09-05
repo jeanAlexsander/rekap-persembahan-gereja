@@ -11,6 +11,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
 };
@@ -46,6 +47,8 @@ const months = [
   { value: "12", label: "Desember" },
 ];
 
+const blockOrder = ["A", "B", "C", "D", "E", "SK"];
+
 function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -76,7 +79,10 @@ export default function RekapClient({
   );
   const [selectedBlock, setSelectedBlock] = useState("all");
 
-  // Tahun yang tersedia berdasarkan data persembahan
+  // ==========================================
+  // TAHUN YANG TERSEDIA
+  // ==========================================
+
   const years = useMemo(() => {
     return Array.from(
       new Set([
@@ -86,30 +92,57 @@ export default function RekapClient({
     ).sort((a, b) => b - a);
   }, [offerings, currentYear]);
 
-  // =========================
+  // ==========================================
+  // MAP MEMBER
+  // ==========================================
+
+  const memberMap = useMemo(() => {
+    return new Map(members.map((member) => [member.id, member]));
+  }, [members]);
+
+  // ==========================================
+  // MAP BLOCK
+  // ==========================================
+
+  const blockMap = useMemo(() => {
+    return new Map(blocks.map((block) => [block.id, block]));
+  }, [blocks]);
+
+  // ==========================================
   // REKAP PER JEMAAT
-  // =========================
+  // ==========================================
+
   const recapData = useMemo(() => {
+    const searchKeyword = search.toLowerCase().trim();
+
     const filteredOfferings = offerings.filter((offering) => {
       const year = Number(offering.date.slice(0, 4));
+
       const month = Number(offering.date.slice(5, 7));
 
-      const member = members.find((member) => member.id === offering.member_id);
+      const member = memberMap.get(offering.member_id);
 
-      if (!member) return false;
+      if (!member) {
+        return false;
+      }
 
+      // Tahun
       const matchYear = selectedYear === "all" || year === Number(selectedYear);
 
+      // Bulan
       const matchMonth =
         selectedMonth === "all" || month === Number(selectedMonth);
 
+      // Blok
       const matchBlock =
         selectedBlock === "all" ||
         String(member.block_id) === String(selectedBlock);
 
-      const matchSearch = member.name
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      // Search kode / nama
+      const matchSearch =
+        !searchKeyword ||
+        member.name.toLowerCase().includes(searchKeyword) ||
+        (member.code ?? "").toLowerCase().includes(searchKeyword);
 
       return matchYear && matchMonth && matchBlock && matchSearch;
     });
@@ -126,19 +159,21 @@ export default function RekapClient({
     >();
 
     filteredOfferings.forEach((offering) => {
-      const member = members.find((member) => member.id === offering.member_id);
+      const member = memberMap.get(offering.member_id);
 
-      if (!member) return;
+      if (!member) {
+        return;
+      }
 
-      const block = blocks.find((block) => block.id === member.block_id);
+      const block = blockMap.get(member.block_id);
 
       const existing = grouped.get(member.id);
 
       if (existing) {
         existing.total += Number(offering.amount);
+
         existing.transactions += 1;
 
-        // Simpan tanggal transaksi terakhir
         if (offering.date > existing.lastDate) {
           existing.lastDate = offering.date;
         }
@@ -155,32 +190,35 @@ export default function RekapClient({
 
     return Array.from(grouped.values()).sort((a, b) => {
       const blockA = a.block?.code ?? "";
+
       const blockB = b.block?.code ?? "";
 
-      const order = ["A", "B", "C", "D", "E", "SK"];
+      const indexA = blockOrder.indexOf(blockA);
 
-      const indexA = order.indexOf(blockA);
-      const indexB = order.indexOf(blockB);
+      const indexB = blockOrder.indexOf(blockB);
 
       if (indexA !== indexB) {
-        return indexA - indexB;
+        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
       }
 
-      return a.member.name.localeCompare(b.member.name);
+      return (a.member.code ?? "").localeCompare(b.member.code ?? "", "id-ID", {
+        numeric: true,
+      });
     });
   }, [
     offerings,
-    members,
-    blocks,
+    memberMap,
+    blockMap,
     selectedYear,
     selectedMonth,
     selectedBlock,
     search,
   ]);
 
-  // =========================
+  // ==========================================
   // REKAP TOTAL PER BLOK
-  // =========================
+  // ==========================================
+
   const blockRecap = useMemo(() => {
     const recapMap = new Map<
       string,
@@ -195,7 +233,9 @@ export default function RekapClient({
     >();
 
     recapData.forEach((item) => {
-      if (!item.block) return;
+      if (!item.block) {
+        return;
+      }
 
       const existing = recapMap.get(item.block.id);
 
@@ -215,19 +255,19 @@ export default function RekapClient({
       }
     });
 
-    const order = ["A", "B", "C", "D", "E", "SK"];
-
     return Array.from(recapMap.values()).sort((a, b) => {
-      const indexA = order.indexOf(a.code);
-      const indexB = order.indexOf(b.code);
+      const indexA = blockOrder.indexOf(a.code);
 
-      return indexA - indexB;
+      const indexB = blockOrder.indexOf(b.code);
+
+      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
     });
   }, [recapData]);
 
-  // =========================
+  // ==========================================
   // TOTAL
-  // =========================
+  // ==========================================
+
   const totalAmount = recapData.reduce((total, item) => total + item.total, 0);
 
   const totalTransactions = recapData.reduce(
@@ -237,6 +277,10 @@ export default function RekapClient({
 
   const totalMembers = recapData.length;
 
+  // ==========================================
+  // LABEL BULAN
+  // ==========================================
+
   const selectedMonthLabel =
     selectedMonth === "all"
       ? "Semua Bulan"
@@ -244,10 +288,11 @@ export default function RekapClient({
 
   return (
     <div className="space-y-6">
-      {/* =========================
+      {/* ======================================
           HEADER
-      ========================= */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      ====================================== */}
+
+      <div>
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
             <HandCoins size={22} />
@@ -265,168 +310,12 @@ export default function RekapClient({
         </div>
       </div>
 
-      {/* =========================
-          FILTER
-      ========================= */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-4">
-          {/* Search */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Cari Jemaat
-            </label>
-
-            <div className="relative">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cari nama jemaat..."
-                className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                  opacity: 1,
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Tahun */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Tahun
-            </label>
-
-            <select
-              value={selectedYear}
-              onChange={(event) => setSelectedYear(event.target.value)}
-              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-                opacity: 1,
-              }}
-            >
-              <option
-                value="all"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
-                Semua Tahun
-              </option>
-
-              {years.map((year) => (
-                <option
-                  key={year}
-                  value={year}
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#111827",
-                  }}
-                >
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Bulan */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Bulan
-            </label>
-
-            <select
-              value={selectedMonth}
-              onChange={(event) => setSelectedMonth(event.target.value)}
-              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-                opacity: 1,
-              }}
-            >
-              <option
-                value="all"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
-                Semua Bulan
-              </option>
-
-              {months.map((month) => (
-                <option
-                  key={month.value}
-                  value={month.value}
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#111827",
-                  }}
-                >
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Blok */}
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              Blok
-            </label>
-
-            <select
-              value={selectedBlock}
-              onChange={(event) => setSelectedBlock(event.target.value)}
-              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-                opacity: 1,
-              }}
-            >
-              <option
-                value="all"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
-                Semua Blok
-              </option>
-
-              {blocks.map((block) => (
-                <option
-                  key={block.id}
-                  value={block.id}
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#111827",
-                  }}
-                >
-                  {block.code} - {block.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* =========================
+      {/* ======================================
           SUMMARY
-      ========================= */}
+      ====================================== */}
+
       <div className="grid gap-4 md:grid-cols-3">
-        {/* Total */}
+        {/* TOTAL PERSEMBAHAN */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -443,7 +332,7 @@ export default function RekapClient({
           </div>
         </div>
 
-        {/* Transaksi */}
+        {/* TOTAL TRANSAKSI */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -460,7 +349,7 @@ export default function RekapClient({
           </div>
         </div>
 
-        {/* Jemaat */}
+        {/* JEMAAT */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -478,9 +367,131 @@ export default function RekapClient({
         </div>
       </div>
 
-      {/* =========================
+      {/* ======================================
+          FILTER
+      ====================================== */}
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="font-semibold text-gray-900">Filter Rekap</h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Gunakan filter untuk melihat data tertentu.
+          </p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-4">
+          {/* SEARCH */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Cari Jemaat
+            </label>
+
+            <div className="relative">
+              <Search
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cari kode atau nama..."
+                className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-900 shadow-sm outline-none placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                style={{
+                  backgroundColor: "#ffffff",
+                  color: "#111827",
+                  opacity: 1,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* TAHUN */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Tahun
+            </label>
+
+            <select
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              style={{
+                backgroundColor: "#ffffff",
+                color: "#111827",
+                opacity: 1,
+              }}
+            >
+              <option value="all">Semua Tahun</option>
+
+              {years.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* BULAN */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Bulan
+            </label>
+
+            <select
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              style={{
+                backgroundColor: "#ffffff",
+                color: "#111827",
+                opacity: 1,
+              }}
+            >
+              <option value="all">Semua Bulan</option>
+
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* BLOK */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Blok
+            </label>
+
+            <select
+              value={selectedBlock}
+              onChange={(event) => setSelectedBlock(event.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              style={{
+                backgroundColor: "#ffffff",
+                color: "#111827",
+                opacity: 1,
+              }}
+            >
+              <option value="all">Semua Blok</option>
+
+              {blocks.map((block) => (
+                <option key={block.id} value={block.id}>
+                  {block.code} - {block.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================
           TOTAL PER BLOK
-      ========================= */}
+      ====================================== */}
+
       <div>
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Total per Blok</h2>
@@ -492,7 +503,7 @@ export default function RekapClient({
 
         {blockRecap.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
-            Tidak ada data persembahan untuk blok yang dipilih.
+            Tidak ada data persembahan untuk filter yang dipilih.
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -501,7 +512,6 @@ export default function RekapClient({
                 key={block.id}
                 className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
               >
-                {/* HEADER BLOK */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-orange-100 px-2 text-sm font-bold text-orange-600">
@@ -522,7 +532,6 @@ export default function RekapClient({
                   <HandCoins size={20} className="shrink-0 text-orange-500" />
                 </div>
 
-                {/* TOTAL */}
                 <div className="mt-5 border-t border-gray-100 pt-4">
                   <p className="text-xs font-medium text-gray-500">
                     Total Persembahan
@@ -538,9 +547,10 @@ export default function RekapClient({
         )}
       </div>
 
-      {/* =========================
+      {/* ======================================
           TABLE
-      ========================= */}
+      ====================================== */}
+
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-5 py-4">
           <h2 className="font-semibold text-gray-900">Rekap Jemaat</h2>
@@ -559,7 +569,7 @@ export default function RekapClient({
                 </th>
 
                 <th className="px-5 py-3 text-left font-semibold text-gray-600">
-                  Nama Jemaat
+                  Kode Jemaat
                 </th>
 
                 <th className="px-5 py-3 text-left font-semibold text-gray-600">
@@ -596,30 +606,44 @@ export default function RekapClient({
                     key={item.member.id}
                     className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
                   >
+                    {/* NO */}
                     <td className="px-5 py-4 text-gray-500">{index + 1}</td>
 
-                    <td className="px-5 py-4 font-medium text-gray-900">
-                      {item.member.name}
-                    </td>
-
+                    {/* KODE */}
                     <td className="px-5 py-4">
-                      <span className="inline-flex items-center rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
-                        {item.block?.code ?? "-"}
-                      </span>
-
-                      <span className="ml-2 text-gray-500">
-                        {item.block?.name ?? "-"}
+                      <span className="inline-flex items-center rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700">
+                        {item.member.code ?? "-"}
                       </span>
                     </td>
 
+                    {/* BLOK */}
+                    <td className="px-5 py-4">
+                      {item.block ? (
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {item.block.code}
+                          </p>
+
+                          <p className="text-xs text-gray-500">
+                            {item.block.name}
+                          </p>
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+
+                    {/* TRANSAKSI */}
                     <td className="px-5 py-4 text-center text-gray-600">
                       {item.transactions}
                     </td>
 
+                    {/* TANGGAL */}
                     <td className="px-5 py-4 text-center text-gray-600">
                       {formatDate(item.lastDate)}
                     </td>
 
+                    {/* TOTAL */}
                     <td className="px-5 py-4 text-right font-semibold text-gray-900">
                       {formatRupiah(item.total)}
                     </td>

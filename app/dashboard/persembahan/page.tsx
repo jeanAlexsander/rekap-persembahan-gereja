@@ -10,6 +10,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
 };
@@ -63,7 +64,7 @@ export default async function PersembahanPage() {
   // =========================
   const { data: members, error: membersError } = await supabase
     .from("members")
-    .select("id, name, block_id")
+    .select("id, code, name, block_id")
     .order("name", { ascending: true });
 
   if (membersError) {

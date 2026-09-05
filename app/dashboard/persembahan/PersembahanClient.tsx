@@ -1,7 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Search, X, Pencil, Trash2, HandCoins } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Plus,
+  Search,
+  X,
+  Pencil,
+  Trash2,
+  HandCoins,
+  CheckCircle2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import ConfirmModal from "@/components/dashboard/ConfirmModal";
 
@@ -13,6 +21,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
 };
@@ -54,7 +63,7 @@ export default function PersembahanClient({
   const [selectedYear, setSelectedYear] = useState("all");
 
   // =========================
-  // MODAL
+  // MODAL FORM
   // =========================
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,7 +71,7 @@ export default function PersembahanClient({
   // =========================
   // FORM
   // =========================
-  const [memberId, setMemberId] = useState("");
+  const [memberCode, setMemberCode] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
@@ -73,7 +82,11 @@ export default function PersembahanClient({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // =========================
+  // DELETE MODAL
+  // =========================
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [deletingOffering, setDeletingOffering] = useState<Offering | null>(
     null,
   );
@@ -99,21 +112,123 @@ export default function PersembahanClient({
   // =========================
   // DAFTAR TAHUN
   // =========================
-  const years = Array.from(
-    new Set([
-      new Date().getFullYear(),
-      ...offerings.map((offering) =>
-        new Date(`${offering.date}T00:00:00`).getFullYear(),
-      ),
-    ]),
-  ).sort((a, b) => b - a);
+  const years = useMemo(() => {
+    return Array.from(
+      new Set([
+        new Date().getFullYear(),
+        ...offerings.map((offering) =>
+          new Date(`${offering.date}T00:00:00`).getFullYear(),
+        ),
+      ]),
+    ).sort((a, b) => b - a);
+  }, [offerings]);
+
+  // =========================
+  // MEMBER DARI KODE
+  // =========================
+  const selectedMember = useMemo(() => {
+    const cleanCode = memberCode.trim().toLowerCase();
+
+    if (!cleanCode) return null;
+
+    return (
+      members.find(
+        (member) => (member.code ?? "").trim().toLowerCase() === cleanCode,
+      ) ?? null
+    );
+  }, [members, memberCode]);
+
+  // =========================
+  // BLOK MEMBER
+  // =========================
+  const selectedBlockData = useMemo(() => {
+    if (!selectedMember) return null;
+
+    return blocks.find((block) => block.id === selectedMember.block_id) ?? null;
+  }, [blocks, selectedMember]);
+
+  // =========================
+  // FILTERED OFFERINGS
+  // =========================
+  const filteredOfferings = useMemo(() => {
+    return offerings
+      .filter((offering) => {
+        const member = members.find(
+          (member) => member.id === offering.member_id,
+        );
+
+        if (!member) return false;
+
+        const offeringDate = new Date(`${offering.date}T00:00:00`);
+
+        const offeringMonth = offeringDate.getMonth() + 1;
+
+        const offeringYear = offeringDate.getFullYear();
+
+        // SEARCH
+        const searchValue = search.toLowerCase().trim();
+
+        const matchSearch =
+          member.name.toLowerCase().includes(searchValue) ||
+          (member.code ?? "").toLowerCase().includes(searchValue);
+
+        // FILTER BLOK
+        const matchBlock =
+          selectedBlock === "all" ||
+          String(member.block_id) === String(selectedBlock);
+
+        // FILTER BULAN
+        const matchMonth =
+          selectedMonth === "all" || offeringMonth === Number(selectedMonth);
+
+        // FILTER TAHUN
+        const matchYear =
+          selectedYear === "all" || offeringYear === Number(selectedYear);
+
+        return matchSearch && matchBlock && matchMonth && matchYear;
+      })
+      .sort((a, b) => {
+        // 1. Tanggal terbaru → terlama
+        const dateCompare =
+          new Date(`${b.date}T00:00:00`).getTime() -
+          new Date(`${a.date}T00:00:00`).getTime();
+
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+
+        // 2. Jika tanggal sama → kode jemaat A-Z
+        const codeA =
+          members.find((member) => member.id === a.member_id)?.code ?? "";
+
+        const codeB =
+          members.find((member) => member.id === b.member_id)?.code ?? "";
+
+        return codeA.localeCompare(codeB, "id-ID", { numeric: true });
+      });
+  }, [offerings, members, search, selectedBlock, selectedMonth, selectedYear]);
+
+  // =========================
+  // TOTAL PERSEMBAHAN
+  // =========================
+  const totalAmount = useMemo(() => {
+    return filteredOfferings.reduce(
+      (total, offering) => total + Number(offering.amount),
+      0,
+    );
+  }, [filteredOfferings]);
+
+  // =========================
+  // TOTAL TRANSAKSI
+  // =========================
+  const totalTransactions = filteredOfferings.length;
 
   // =========================
   // OPEN TAMBAH MODAL
   // =========================
   function openAddModal() {
     setEditingId(null);
-    setMemberId("");
+    setMemberCode("");
     setAmount("");
     setDate(new Date().toISOString().split("T")[0]);
     setNote("");
@@ -125,8 +240,10 @@ export default function PersembahanClient({
   // OPEN EDIT MODAL
   // =========================
   function openEditModal(offering: Offering) {
+    const member = members.find((item) => item.id === offering.member_id);
+
     setEditingId(offering.id);
-    setMemberId(offering.member_id);
+    setMemberCode(member?.code ?? "");
     setAmount(String(offering.amount));
     setDate(offering.date);
     setNote(offering.note ?? "");
@@ -135,14 +252,14 @@ export default function PersembahanClient({
   }
 
   // =========================
-  // CLOSE MODAL
+  // CLOSE FORM MODAL
   // =========================
   function closeModal() {
     if (loading) return;
 
     setIsModalOpen(false);
     setEditingId(null);
-    setMemberId("");
+    setMemberCode("");
     setAmount("");
     setDate("");
     setNote("");
@@ -172,93 +289,20 @@ export default function PersembahanClient({
   }
 
   // =========================
-  // SELECTED MEMBER
-  // =========================
-  const selectedMember = members.find(
-    (member) => String(member.id) === String(memberId),
-  );
-
-  // =========================
-  // SELECTED BLOCK
-  // =========================
-  const selectedBlockData = blocks.find(
-    (block) => String(block.id) === String(selectedMember?.block_id),
-  );
-
-  // =========================
-  // FILTERED OFFERINGS
-  // =========================
-  const filteredOfferings = offerings
-    .filter((offering) => {
-      const member = members.find((member) => member.id === offering.member_id);
-
-      if (!member) return false;
-
-      const offeringDate = new Date(`${offering.date}T00:00:00`);
-
-      const offeringMonth = offeringDate.getMonth() + 1;
-      const offeringYear = offeringDate.getFullYear();
-
-      // SEARCH
-      const matchSearch = member.name
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-      // FILTER BLOK
-      const matchBlock =
-        selectedBlock === "all" ||
-        String(member.block_id) === String(selectedBlock);
-
-      // FILTER BULAN
-      const matchMonth =
-        selectedMonth === "all" || offeringMonth === Number(selectedMonth);
-
-      // FILTER TAHUN
-      const matchYear =
-        selectedYear === "all" || offeringYear === Number(selectedYear);
-
-      return matchSearch && matchBlock && matchMonth && matchYear;
-    })
-    .sort((a, b) => {
-      // 1. Tanggal terbaru → terlama
-      const dateCompare =
-        new Date(b.date).getTime() - new Date(a.date).getTime();
-
-      if (dateCompare !== 0) {
-        return dateCompare;
-      }
-
-      // 2. Jika tanggal sama → nama jemaat A-Z
-      const nameA =
-        members.find((member) => member.id === a.member_id)?.name ?? "";
-
-      const nameB =
-        members.find((member) => member.id === b.member_id)?.name ?? "";
-
-      return nameA.localeCompare(nameB, "id-ID");
-    });
-
-  // =========================
-  // TOTAL PERSEMBAHAN
-  // =========================
-  const totalAmount = filteredOfferings.reduce(
-    (total, offering) => total + Number(offering.amount),
-    0,
-  );
-
-  // =========================
-  // TOTAL TRANSAKSI
-  // =========================
-  const totalTransactions = filteredOfferings.length;
-
-  // =========================
   // SUBMIT FORM
   // =========================
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!memberId) {
-      setError("Nama jemaat wajib dipilih.");
+    const cleanCode = memberCode.trim().toUpperCase();
+
+    if (!cleanCode) {
+      setError("Kode jemaat wajib diisi.");
+      return;
+    }
+
+    if (!selectedMember) {
+      setError(`Kode jemaat "${cleanCode}" tidak ditemukan.`);
       return;
     }
 
@@ -276,13 +320,13 @@ export default function PersembahanClient({
     setError("");
 
     // =========================
-    // EDIT PERSEMBAHAN
+    // EDIT
     // =========================
     if (editingId) {
       const { data, error } = await supabase
         .from("offerings")
         .update({
-          member_id: memberId,
+          member_id: selectedMember.id,
           amount: Number(amount),
           date,
           note: note.trim() || null,
@@ -312,17 +356,16 @@ export default function PersembahanClient({
 
       setLoading(false);
       closeModal();
-
       return;
     }
 
     // =========================
-    // TAMBAH PERSEMBAHAN
+    // TAMBAH
     // =========================
     const { data, error } = await supabase
       .from("offerings")
       .insert({
-        member_id: memberId,
+        member_id: selectedMember.id,
         amount: Number(amount),
         date,
         note: note.trim() || null,
@@ -383,6 +426,7 @@ export default function PersembahanClient({
 
       if (error) {
         console.error("Gagal menghapus persembahan:", error);
+
         setError(error.message);
         return;
       }
@@ -397,6 +441,13 @@ export default function PersembahanClient({
       setLoading(false);
     }
   }
+
+  // =========================
+  // MEMBER YANG DIHAPUS
+  // =========================
+  const deletingMember = deletingOffering
+    ? members.find((member) => member.id === deletingOffering.member_id)
+    : null;
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -446,7 +497,7 @@ export default function PersembahanClient({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari nama jemaat..."
+              placeholder="Cari kode atau nama jemaat..."
               className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
               style={{
                 backgroundColor: "#ffffff",
@@ -456,7 +507,7 @@ export default function PersembahanClient({
             />
           </div>
 
-          {/* FILTER BLOK */}
+          {/* BLOK */}
           <select
             value={selectedBlock}
             onChange={(event) => setSelectedBlock(event.target.value)}
@@ -467,31 +518,16 @@ export default function PersembahanClient({
               opacity: 1,
             }}
           >
-            <option
-              value="all"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-              }}
-            >
-              Semua Blok
-            </option>
+            <option value="all">Semua Blok</option>
 
             {blocks.map((block) => (
-              <option
-                key={block.id}
-                value={block.id}
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
+              <option key={block.id} value={block.id}>
                 {block.code} - {block.name}
               </option>
             ))}
           </select>
 
-          {/* FILTER BULAN */}
+          {/* BULAN */}
           <select
             value={selectedMonth}
             onChange={(event) => setSelectedMonth(event.target.value)}
@@ -502,31 +538,16 @@ export default function PersembahanClient({
               opacity: 1,
             }}
           >
-            <option
-              value="all"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-              }}
-            >
-              Semua Bulan
-            </option>
+            <option value="all">Semua Bulan</option>
 
             {months.map((month) => (
-              <option
-                key={month.value}
-                value={month.value}
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
+              <option key={month.value} value={month.value}>
                 {month.label}
               </option>
             ))}
           </select>
 
-          {/* FILTER TAHUN */}
+          {/* TAHUN */}
           <select
             value={selectedYear}
             onChange={(event) => setSelectedYear(event.target.value)}
@@ -537,25 +558,10 @@ export default function PersembahanClient({
               opacity: 1,
             }}
           >
-            <option
-              value="all"
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#111827",
-              }}
-            >
-              Semua Tahun
-            </option>
+            <option value="all">Semua Tahun</option>
 
             {years.map((year) => (
-              <option
-                key={year}
-                value={year}
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#111827",
-                }}
-              >
+              <option key={year} value={year}>
                 {year}
               </option>
             ))}
@@ -567,7 +573,6 @@ export default function PersembahanClient({
           SUMMARY
       ========================= */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        {/* TOTAL PERSEMBAHAN */}
         <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-orange-600 shadow-sm">
@@ -586,7 +591,6 @@ export default function PersembahanClient({
           </div>
         </div>
 
-        {/* TOTAL TRANSAKSI */}
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
@@ -626,6 +630,10 @@ export default function PersembahanClient({
                 <th className="px-6 py-4 font-semibold text-gray-700">No</th>
 
                 <th className="px-6 py-4 font-semibold text-gray-700">
+                  Kode Jemaat
+                </th>
+
+                <th className="px-6 py-4 font-semibold text-gray-700">
                   Nama Jemaat
                 </th>
 
@@ -653,7 +661,7 @@ export default function PersembahanClient({
               {filteredOfferings.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-gray-500"
                   >
                     Belum ada data persembahan.
@@ -674,15 +682,18 @@ export default function PersembahanClient({
                       key={offering.id}
                       className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
                     >
-                      {/* NO */}
                       <td className="px-6 py-4 text-gray-600">{index + 1}</td>
 
-                      {/* NAMA */}
+                      <td className="px-6 py-4">
+                        <span className="inline-flex rounded-lg bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600">
+                          {member?.code ?? "-"}
+                        </span>
+                      </td>
+
                       <td className="px-6 py-4 font-medium text-gray-900">
                         {member?.name ?? "-"}
                       </td>
 
-                      {/* BLOK */}
                       <td className="px-6 py-4 text-gray-700">
                         {block ? (
                           <div>
@@ -699,22 +710,18 @@ export default function PersembahanClient({
                         )}
                       </td>
 
-                      {/* NOMINAL */}
                       <td className="px-6 py-4 font-semibold text-gray-900">
-                        {formatRupiah(offering.amount)}
+                        {formatRupiah(Number(offering.amount))}
                       </td>
 
-                      {/* TANGGAL */}
                       <td className="px-6 py-4 text-gray-700">
                         {formatDate(offering.date)}
                       </td>
 
-                      {/* CATATAN */}
                       <td className="px-6 py-4 text-gray-600">
                         {offering.note || "-"}
                       </td>
 
-                      {/* AKSI */}
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button
@@ -748,12 +755,12 @@ export default function PersembahanClient({
       </div>
 
       {/* =========================
-          MODAL
+          MODAL TAMBAH / EDIT
       ========================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl">
-            {/* HEADER MODAL */}
+            {/* HEADER */}
             <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
@@ -763,14 +770,15 @@ export default function PersembahanClient({
                 <p className="mt-1 text-sm text-gray-600">
                   {editingId
                     ? "Perbarui data persembahan jemaat."
-                    : "Tambahkan data persembahan jemaat."}
+                    : "Masukkan kode jemaat, nominal, dan tanggal."}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                disabled={loading}
+                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <X size={20} />
               </button>
@@ -778,92 +786,129 @@ export default function PersembahanClient({
 
             {/* FORM */}
             <form onSubmit={handleSubmit} className="space-y-5 px-6 py-6">
-              {/* NAMA JEMAAT */}
+              {/* KODE JEMAAT */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
-                  Nama Jemaat
-                </label>
-
-                <select
-                  value={memberId}
-                  onChange={(event) => setMemberId(event.target.value)}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                <label
+                  htmlFor="kode-jemaat-persembahan"
+                  className="mb-2 block text-sm font-semibold text-gray-800"
                 >
-                  <option value="">Pilih jemaat</option>
-
-                  {members
-                    .slice()
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* BLOK */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
-                  Blok
+                  Kode Jemaat
                 </label>
 
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-                  {selectedBlockData ? (
-                    <p className="text-sm font-medium text-gray-900">
-                      {selectedBlockData.code} - {selectedBlockData.name}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      Blok akan muncul setelah jemaat dipilih.
-                    </p>
-                  )}
-                </div>
+                <input
+                  id="kode-jemaat-persembahan"
+                  type="text"
+                  value={memberCode}
+                  onChange={(event) => {
+                    setMemberCode(event.target.value.toUpperCase());
+                    setError("");
+                  }}
+                  placeholder="Contoh: A1 atau SK1"
+                  autoComplete="off"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold uppercase text-gray-900 outline-none transition placeholder:font-normal placeholder:normal-case placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
+                />
+
+                {/* MEMBER FOUND */}
+                {memberCode.trim() && selectedMember && (
+                  <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2
+                        size={20}
+                        className="mt-0.5 shrink-0 text-green-600"
+                      />
+
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {selectedMember.name}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-600">
+                          Kode:{" "}
+                          <span className="font-semibold">
+                            {selectedMember.code}
+                          </span>
+                        </p>
+
+                        <p className="text-sm text-gray-600">
+                          Blok:{" "}
+                          <span className="font-semibold">
+                            {selectedBlockData
+                              ? `${selectedBlockData.code}`
+                              : "-"}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MEMBER NOT FOUND */}
+                {memberCode.trim() && !selectedMember && (
+                  <p className="mt-2 text-sm text-red-600">
+                    Kode jemaat tidak ditemukan.
+                  </p>
+                )}
               </div>
 
               {/* NOMINAL */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                <label
+                  htmlFor="nominal-persembahan"
+                  className="mb-2 block text-sm font-semibold text-gray-800"
+                >
                   Nominal
                 </label>
 
                 <input
+                  id="nominal-persembahan"
                   type="number"
-                  min="0"
+                  min="1"
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   placeholder="Contoh: 100000"
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
                 />
               </div>
 
               {/* TANGGAL */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                <label
+                  htmlFor="tanggal-persembahan"
+                  className="mb-2 block text-sm font-semibold text-gray-800"
+                >
                   Tanggal
                 </label>
 
                 <input
+                  id="tanggal-persembahan"
                   type="date"
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
                 />
               </div>
 
               {/* CATATAN */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                <label
+                  htmlFor="catatan-persembahan"
+                  className="mb-2 block text-sm font-semibold text-gray-800"
+                >
                   Catatan{" "}
                   <span className="font-normal text-gray-500">(opsional)</span>
                 </label>
 
                 <textarea
+                  id="catatan-persembahan"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                   rows={3}
                   placeholder="Tambahkan catatan jika diperlukan..."
-                  className="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                  disabled={loading}
+                  className="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
                 />
               </div>
 
@@ -901,17 +946,19 @@ export default function PersembahanClient({
           </div>
         </div>
       )}
+
+      {/* =========================
+          MODAL KONFIRMASI HAPUS
+      ========================= */}
       <ConfirmModal
         open={showDeleteModal}
         title="Hapus Persembahan?"
         message={
           deletingOffering
             ? `Apakah Anda yakin ingin menghapus transaksi persembahan dari "${
-                members.find(
-                  (member) => member.id === deletingOffering.member_id,
-                )?.name ?? "-"
-              }" sebesar ${formatRupiah(
-                deletingOffering.amount,
+                deletingMember?.code ?? "-"
+              } - ${deletingMember?.name ?? "-"}" sebesar ${formatRupiah(
+                Number(deletingOffering.amount),
               )} pada ${formatDate(deletingOffering.date)}?`
             : "Apakah Anda yakin ingin menghapus data persembahan ini?"
         }

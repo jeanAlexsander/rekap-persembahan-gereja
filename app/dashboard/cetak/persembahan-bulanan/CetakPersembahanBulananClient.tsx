@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ArrowLeft, CalendarDays, HandCoins, Printer } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -12,6 +12,7 @@ type Block = {
 
 type Member = {
   id: string;
+  code: string | null;
   name: string;
   block_id: string;
 };
@@ -47,20 +48,14 @@ const months = [
   { value: "12", label: "Desember" },
 ];
 
+const blockOrder = ["A", "B", "C", "D", "E", "SK"];
+
 function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${value}T00:00:00`));
 }
 
 export default function CetakPersembahanBulananClient({
@@ -79,6 +74,10 @@ export default function CetakPersembahanBulananClient({
 
   const [selectedBlock, setSelectedBlock] = useState("all");
 
+  // ==========================================
+  // TAHUN TERSEDIA
+  // ==========================================
+
   const years = useMemo(() => {
     return Array.from(
       new Set([
@@ -88,84 +87,222 @@ export default function CetakPersembahanBulananClient({
     ).sort((a, b) => b - a);
   }, [offerings, currentYear]);
 
-  const reportData = useMemo(() => {
-    const filteredOfferings = offerings.filter((offering) => {
-      const year = Number(offering.date.slice(0, 4));
-      const month = Number(offering.date.slice(5, 7));
+  // ==========================================
+  // MAP MEMBER
+  // ==========================================
 
-      const member = members.find((member) => member.id === offering.member_id);
+  const memberMap = useMemo(() => {
+    return new Map(members.map((member) => [member.id, member]));
+  }, [members]);
 
-      if (!member) return false;
+  // ==========================================
+  // MAP BLOCK
+  // ==========================================
 
-      const matchYear = year === Number(selectedYear);
+  const blockMap = useMemo(() => {
+    return new Map(blocks.map((block) => [block.id, block]));
+  }, [blocks]);
 
-      const matchMonth = month === Number(selectedMonth);
+  // ==========================================
+  // DATA TRANSAKSI
+  // ==========================================
 
-      const matchBlock =
-        selectedBlock === "all" ||
-        String(member.block_id) === String(selectedBlock);
+  const reportTransactions = useMemo(() => {
+    return offerings
+      .filter((offering) => {
+        const year = Number(offering.date.slice(0, 4));
 
-      return matchYear && matchMonth && matchBlock;
-    });
+        const month = Number(offering.date.slice(5, 7));
 
-    const grouped = new Map<
+        const member = memberMap.get(offering.member_id);
+
+        if (!member) {
+          return false;
+        }
+
+        const matchYear = year === Number(selectedYear);
+
+        const matchMonth = month === Number(selectedMonth);
+
+        const matchBlock =
+          selectedBlock === "all" ||
+          String(member.block_id) === String(selectedBlock);
+
+        return matchYear && matchMonth && matchBlock;
+      })
+      .map((offering) => {
+        const member = memberMap.get(offering.member_id);
+
+        const block = member ? blockMap.get(member.block_id) : undefined;
+
+        return {
+          offering,
+          member,
+          block,
+        };
+      })
+      .filter((item) => item.member !== undefined && item.block !== undefined)
+      .sort((a, b) => {
+        const blockA = a.block?.code ?? "";
+
+        const blockB = b.block?.code ?? "";
+
+        const blockIndexA = blockOrder.indexOf(blockA);
+
+        const blockIndexB = blockOrder.indexOf(blockB);
+
+        // Blok A → B → C → D → E → SK
+        if (blockIndexA !== blockIndexB) {
+          return (
+            (blockIndexA === -1 ? 999 : blockIndexA) -
+            (blockIndexB === -1 ? 999 : blockIndexB)
+          );
+        }
+
+        // Kode jemaat A1 → A2 → A3 → ...
+        const codeA = a.member?.code ?? "";
+
+        const codeB = b.member?.code ?? "";
+
+        const codeCompare = codeA.localeCompare(codeB, "id-ID", {
+          numeric: true,
+        });
+
+        if (codeCompare !== 0) {
+          return codeCompare;
+        }
+
+        // Kalau kode sama, tanggal terbaru
+        return b.offering.date.localeCompare(a.offering.date);
+      });
+  }, [
+    offerings,
+    memberMap,
+    blockMap,
+    selectedYear,
+    selectedMonth,
+    selectedBlock,
+  ]);
+
+  // ==========================================
+  // TRANSAKSI PER BLOK
+  // ==========================================
+
+  const transactionsByBlock = useMemo(() => {
+    const result = new Map<
       string,
       {
-        member: Member;
-        block: Block | undefined;
+        block: Block;
+        items: {
+          id: string;
+          code: string;
+          amount: number;
+          date: string;
+        }[];
         total: number;
-        transactions: number;
-        lastDate: string;
       }
     >();
 
-    filteredOfferings.forEach((offering) => {
-      const member = members.find((member) => member.id === offering.member_id);
+    reportTransactions.forEach(({ offering, member, block }) => {
+      if (!member || !block) {
+        return;
+      }
 
-      if (!member) return;
+      const existing = result.get(block.id);
 
-      const block = blocks.find((block) => block.id === member.block_id);
-
-      const existing = grouped.get(member.id);
+      const item = {
+        id: offering.id,
+        code: member.code ?? "-",
+        amount: Number(offering.amount),
+        date: offering.date,
+      };
 
       if (existing) {
+        existing.items.push(item);
         existing.total += Number(offering.amount);
-        existing.transactions += 1;
-
-        if (offering.date > existing.lastDate) {
-          existing.lastDate = offering.date;
-        }
       } else {
-        grouped.set(member.id, {
-          member,
+        result.set(block.id, {
           block,
+          items: [item],
           total: Number(offering.amount),
-          transactions: 1,
-          lastDate: offering.date,
         });
       }
     });
 
-    const order = ["A", "B", "C", "D", "E", "SK"];
+    // ========================================
+    // BLOK TERTENTU
+    // ========================================
 
-    return Array.from(grouped.values()).sort((a, b) => {
-      const indexA = order.indexOf(a.block?.code ?? "");
-      const indexB = order.indexOf(b.block?.code ?? "");
+    if (selectedBlock !== "all") {
+      const selected = blocks.find(
+        (block) => String(block.id) === String(selectedBlock),
+      );
 
-      if (indexA !== indexB) {
-        return indexA - indexB;
+      if (!selected) {
+        return [];
       }
 
-      return a.member.name.localeCompare(b.member.name);
-    });
-  }, [offerings, members, blocks, selectedYear, selectedMonth, selectedBlock]);
+      const selectedData = result.get(selected.id);
 
-  const totalAmount = reportData.reduce((total, item) => total + item.total, 0);
+      return [
+        selectedData ?? {
+          block: selected,
+          items: [],
+          total: 0,
+        },
+      ];
+    }
 
-  const totalTransactions = reportData.reduce(
-    (total, item) => total + item.transactions,
+    // ========================================
+    // SEMUA BLOK
+    // ========================================
+
+    return blockOrder
+      .map((code) => {
+        const block = blocks.find((item) => item.code === code);
+
+        if (!block) {
+          return null;
+        }
+
+        return (
+          result.get(block.id) ?? {
+            block,
+            items: [],
+            total: 0,
+          }
+        );
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          block: Block;
+          items: {
+            id: string;
+            code: string;
+            amount: number;
+            date: string;
+          }[];
+          total: number;
+        } => item !== null,
+      );
+  }, [reportTransactions, blocks, selectedBlock]);
+
+  // ==========================================
+  // TOTAL
+  // ==========================================
+
+  const totalAmount = reportTransactions.reduce(
+    (total, item) => total + Number(item.offering.amount),
     0,
   );
+
+  const totalTransactions = reportTransactions.length;
+
+  // ==========================================
+  // LABEL
+  // ==========================================
 
   const selectedMonthLabel =
     months.find((month) => month.value === selectedMonth)?.label ?? "";
@@ -174,16 +311,31 @@ export default function CetakPersembahanBulananClient({
     selectedBlock === "all"
       ? "Semua Blok"
       : (() => {
-          const block = blocks.find((item) => item.id === selectedBlock);
+          const block = blocks.find(
+            (item) => String(item.id) === String(selectedBlock),
+          );
 
           return block ? `${block.code} - ${block.name}` : "Semua Blok";
         })();
 
+  // ==========================================
+  // JUMLAH BARIS PRINT
+  // ==========================================
+
+  const maxRows = Math.max(
+    ...transactionsByBlock.map((item) => item.items.length),
+    1,
+  );
+
   return (
     <>
-      {/* AREA APLIKASI - TIDAK IKUT PRINT */}
+      {/* ======================================
+          AREA APLIKASI
+      ====================================== */}
+
       <div className="space-y-6 print:hidden">
         {/* HEADER */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -221,9 +373,11 @@ export default function CetakPersembahanBulananClient({
         </div>
 
         {/* FILTER */}
+
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
             {/* TAHUN */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Tahun
@@ -232,7 +386,7 @@ export default function CetakPersembahanBulananClient({
               <select
                 value={selectedYear}
                 onChange={(event) => setSelectedYear(event.target.value)}
-                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                 style={{
                   backgroundColor: "#ffffff",
                   color: "#111827",
@@ -240,14 +394,7 @@ export default function CetakPersembahanBulananClient({
                 }}
               >
                 {years.map((year) => (
-                  <option
-                    key={year}
-                    value={year}
-                    style={{
-                      backgroundColor: "#ffffff",
-                      color: "#111827",
-                    }}
-                  >
+                  <option key={year} value={year}>
                     {year}
                   </option>
                 ))}
@@ -255,6 +402,7 @@ export default function CetakPersembahanBulananClient({
             </div>
 
             {/* BULAN */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Bulan
@@ -263,7 +411,7 @@ export default function CetakPersembahanBulananClient({
               <select
                 value={selectedMonth}
                 onChange={(event) => setSelectedMonth(event.target.value)}
-                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                 style={{
                   backgroundColor: "#ffffff",
                   color: "#111827",
@@ -271,14 +419,7 @@ export default function CetakPersembahanBulananClient({
                 }}
               >
                 {months.map((month) => (
-                  <option
-                    key={month.value}
-                    value={month.value}
-                    style={{
-                      backgroundColor: "#ffffff",
-                      color: "#111827",
-                    }}
-                  >
+                  <option key={month.value} value={month.value}>
                     {month.label}
                   </option>
                 ))}
@@ -286,6 +427,7 @@ export default function CetakPersembahanBulananClient({
             </div>
 
             {/* BLOK */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700">
                 Blok
@@ -294,41 +436,39 @@ export default function CetakPersembahanBulananClient({
               <select
                 value={selectedBlock}
                 onChange={(event) => setSelectedBlock(event.target.value)}
-                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                className="h-11 w-full rounded-xl border border-gray-300 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                 style={{
                   backgroundColor: "#ffffff",
                   color: "#111827",
                   opacity: 1,
                 }}
               >
-                <option
-                  value="all"
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#111827",
-                  }}
-                >
-                  Semua Blok
-                </option>
+                <option value="all">Semua Blok</option>
 
-                {blocks.map((block) => (
-                  <option
-                    key={block.id}
-                    value={block.id}
-                    style={{
-                      backgroundColor: "#ffffff",
-                      color: "#111827",
-                    }}
-                  >
-                    {block.code} - {block.name}
-                  </option>
-                ))}
+                {blocks
+                  .slice()
+                  .sort((a, b) => {
+                    const indexA = blockOrder.indexOf(a.code);
+
+                    const indexB = blockOrder.indexOf(b.code);
+
+                    return (
+                      (indexA === -1 ? 999 : indexA) -
+                      (indexB === -1 ? 999 : indexB)
+                    );
+                  })
+                  .map((block) => (
+                    <option key={block.id} value={block.id}>
+                      {block.code} - {block.name}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
         </div>
 
         {/* PREVIEW */}
+
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-200 p-5">
             <div className="flex items-center gap-3">
@@ -346,103 +486,103 @@ export default function CetakPersembahanBulananClient({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] text-sm">
-              <thead className="bg-gray-50">
-                <tr className="border-b border-gray-200">
-                  <th className="px-5 py-3 text-left font-semibold text-gray-600">
-                    No
-                  </th>
+          <div className="overflow-x-auto p-5">
+            <div
+              className={`grid gap-4 ${
+                transactionsByBlock.length === 1
+                  ? "max-w-2xl grid-cols-1"
+                  : "lg:grid-cols-3"
+              }`}
+            >
+              {transactionsByBlock.map((blockData) => (
+                <div
+                  key={blockData.block.id}
+                  className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+                >
+                  {/* BLOCK HEADER */}
 
-                  <th className="px-5 py-3 text-left font-semibold text-gray-600">
-                    Nama Jemaat
-                  </th>
+                  <div className="bg-orange-50 px-4 py-3">
+                    <p className="font-bold text-orange-700">
+                      BLOK {blockData.block.code}
+                    </p>
 
-                  <th className="px-5 py-3 text-left font-semibold text-gray-600">
-                    Blok
-                  </th>
+                    <p className="text-xs text-gray-500">
+                      {blockData.block.name}
+                    </p>
+                  </div>
 
-                  <th className="px-5 py-3 text-center font-semibold text-gray-600">
-                    Transaksi
-                  </th>
+                  {/* TABLE */}
 
-                  <th className="px-5 py-3 text-center font-semibold text-gray-600">
-                    Tanggal
-                  </th>
+                  <table className="w-full text-sm text-gray-900">
+                    <thead className="bg-gray-50 text-gray-700">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          No
+                        </th>
 
-                  <th className="px-5 py-3 text-right font-semibold text-gray-600">
-                    Total Persembahan
-                  </th>
-                </tr>
-              </thead>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Kode
+                        </th>
 
-              <tbody>
-                {reportData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-12 text-center text-gray-500"
-                    >
-                      Tidak ada data persembahan untuk periode dan blok yang
-                      dipilih.
-                    </td>
-                  </tr>
-                ) : (
-                  reportData.map((item, index) => (
-                    <tr
-                      key={item.member.id}
-                      className="border-b border-gray-100 last:border-0"
-                    >
-                      <td className="px-5 py-4 text-gray-500">{index + 1}</td>
+                        <th className="px-3 py-2 text-right font-semibold">
+                          Nominal
+                        </th>
+                      </tr>
+                    </thead>
 
-                      <td className="px-5 py-4 font-medium text-gray-900">
-                        {item.member.name}
-                      </td>
+                    <tbody>
+                      {blockData.items.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="px-3 py-8 text-center text-gray-400"
+                          >
+                            Belum ada persembahan pada periode ini.
+                          </td>
+                        </tr>
+                      ) : (
+                        blockData.items.map((item, index) => (
+                          <tr
+                            key={item.id}
+                            className="border-t border-gray-100"
+                          >
+                            <td className="px-3 py-2">{index + 1}</td>
 
-                      <td className="px-5 py-4 text-gray-600">
-                        {item.block?.code ?? "-"}{" "}
-                        <span className="text-gray-400">
-                          - {item.block?.name ?? "-"}
-                        </span>
-                      </td>
+                            <td className="px-3 py-2 font-semibold text-gray-900">
+                              {item.code}
+                            </td>
 
-                      <td className="px-5 py-4 text-center text-gray-600">
-                        {item.transactions}
-                      </td>
+                            <td className="px-3 py-2 text-right">
+                              {formatRupiah(item.amount)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
 
-                      <td className="px-5 py-4 text-center text-gray-600">
-                        {formatDate(item.lastDate)}
-                      </td>
+                    <tfoot className="border-t border-gray-200 bg-gray-50">
+                      <tr>
+                        <td
+                          colSpan={2}
+                          className="px-3 py-2 text-right font-bold text-gray-700"
+                        >
+                          TOTAL
+                        </td>
 
-                      <td className="px-5 py-4 text-right font-semibold text-gray-900">
-                        {formatRupiah(item.total)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-
-              {reportData.length > 0 && (
-                <tfoot className="bg-gray-50">
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-4 text-right font-bold text-gray-700"
-                    >
-                      TOTAL
-                    </td>
-
-                    <td className="px-5 py-4 text-right font-bold text-orange-600">
-                      {formatRupiah(totalAmount)}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+                        <td className="px-3 py-2 text-right font-bold text-orange-600">
+                          {formatRupiah(blockData.total)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* SUMMARY */}
+
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3">
@@ -478,145 +618,184 @@ export default function CetakPersembahanBulananClient({
         </div>
       </div>
 
-      {/* ============================= */}
-      {/* PRINT AREA */}
-      {/* ============================= */}
+      {/* ======================================
+          PRINT AREA
+      ====================================== */}
 
       <div className="hidden print:block">
-        <div className="p-8 text-black">
-          {/* JUDUL */}
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold">GKJ</h1>
+        <div className="px-4 py-2 text-black">
+          {/* HEADER */}
 
-            <h2 className="mt-1 text-xl font-bold">REKAP PERSEMBAHAN</h2>
+          <div className="mb-4 text-center">
+            <h1 className="text-xl font-bold">
+              REKAP LAPORAN PERSEMBAHAN BULANAN
+            </h1>
 
-            <p className="mt-1 text-sm">
-              {selectedMonthLabel} {selectedYear}
-            </p>
+            <h2 className="mt-1 text-lg font-bold">
+              BULAN {selectedMonthLabel.toUpperCase()} {selectedYear}
+            </h2>
 
-            <p className="text-sm">{selectedBlockLabel}</p>
+            {selectedBlock !== "all" && (
+              <p className="mt-1 text-sm font-semibold">{selectedBlockLabel}</p>
+            )}
           </div>
 
-          {/* TABLE PRINT */}
-          <table className="w-full border-collapse text-sm">
+          {/* PRINT TABLE */}
+
+          <table className="w-full table-fixed border-collapse text-[9px]">
             <thead>
+              {/* NAMA BLOK */}
+
               <tr>
-                <th className="border border-black px-3 py-2 text-left">No</th>
+                {transactionsByBlock.map((blockData) => (
+                  <th
+                    key={blockData.block.id}
+                    colSpan={3}
+                    className="border border-black bg-yellow-300 px-1 py-1 text-center font-bold"
+                  >
+                    BLOK {blockData.block.code}
+                  </th>
+                ))}
+              </tr>
 
-                <th className="border border-black px-3 py-2 text-left">
-                  Nama Jemaat
-                </th>
+              {/* HEADER KOLOM */}
 
-                <th className="border border-black px-3 py-2 text-left">
-                  Blok
-                </th>
+              <tr>
+                {transactionsByBlock.map((blockData) => (
+                  <React.Fragment key={blockData.block.id}>
+                    <th className="border border-black px-1 py-1 text-center">
+                      No
+                    </th>
 
-                <th className="border border-black px-3 py-2 text-center">
-                  Transaksi
-                </th>
+                    <th className="border border-black px-1 py-1 text-center">
+                      Kode
+                    </th>
 
-                <th className="border border-black px-3 py-2 text-center">
-                  Tanggal
-                </th>
-
-                <th className="border border-black px-3 py-2 text-right">
-                  Total Persembahan
-                </th>
+                    <th className="border border-black px-1 py-1 text-center">
+                      Nominal
+                    </th>
+                  </React.Fragment>
+                ))}
               </tr>
             </thead>
 
             <tbody>
-              {reportData.map((item, index) => (
-                <tr key={item.member.id}>
-                  <td className="border border-black px-3 py-2">{index + 1}</td>
+              {Array.from({
+                length: maxRows,
+              }).map((_, rowIndex) => (
+                <tr key={rowIndex}>
+                  {transactionsByBlock.map((blockData) => {
+                    const item = blockData.items[rowIndex];
 
-                  <td className="border border-black px-3 py-2">
-                    {item.member.name}
-                  </td>
+                    return (
+                      <React.Fragment key={`${blockData.block.id}-${rowIndex}`}>
+                        <td className="border border-black px-1 py-1 text-center">
+                          {item ? rowIndex + 1 : ""}
+                        </td>
 
-                  <td className="border border-black px-3 py-2">
-                    {item.block?.code ?? "-"} - {item.block?.name ?? "-"}
-                  </td>
+                        <td className="border border-black px-1 py-1 text-center font-semibold">
+                          {item?.code ?? ""}
+                        </td>
 
-                  <td className="border border-black px-3 py-2 text-center">
-                    {item.transactions}
-                  </td>
-
-                  <td className="border border-black px-3 py-2 text-center">
-                    {formatDate(item.lastDate)}
-                  </td>
-
-                  <td className="border border-black px-3 py-2 text-right">
-                    {formatRupiah(item.total)}
-                  </td>
+                        <td className="border border-black px-1 py-1 text-right">
+                          {item ? formatRupiah(item.amount) : ""}
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
                 </tr>
               ))}
 
-              {reportData.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="border border-black px-3 py-5 text-center"
-                  >
-                    Tidak ada data persembahan.
-                  </td>
-                </tr>
-              )}
-            </tbody>
+              {/* TOTAL BLOK */}
 
-            <tfoot>
+              <tr>
+                {transactionsByBlock.map((blockData) => (
+                  <React.Fragment key={`total-${blockData.block.id}`}>
+                    <td
+                      colSpan={2}
+                      className="border border-black px-1 py-1 text-right font-bold"
+                    >
+                      TOTAL
+                    </td>
+
+                    <td className="border border-black px-1 py-1 text-right font-bold">
+                      {formatRupiah(blockData.total)}
+                    </td>
+                  </React.Fragment>
+                ))}
+              </tr>
+
+              {/* GRAND TOTAL */}
+
               <tr>
                 <td
-                  colSpan={5}
-                  className="border border-black px-3 py-2 text-right font-bold"
+                  colSpan={transactionsByBlock.length * 3}
+                  className="border border-black px-2 py-2 text-right font-bold"
                 >
-                  TOTAL
-                </td>
-
-                <td className="border border-black px-3 py-2 text-right font-bold">
-                  {formatRupiah(totalAmount)}
+                  TOTAL KESELURUHAN {formatRupiah(totalAmount)}
                 </td>
               </tr>
-            </tfoot>
+            </tbody>
           </table>
 
           {/* FOOTER */}
-          <div className="mt-10 flex justify-end">
-            <div className="w-56 text-center">
-              <p className="text-sm">Dicetak pada:</p>
 
-              <p className="text-sm">
-                {new Intl.DateTimeFormat("id-ID", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                }).format(new Date())}
-              </p>
+          <div className="mt-8 grid grid-cols-2 gap-12 text-center">
+            <div>
+              <p className="text-sm">Mengetahui</p>
+
+              <p className="text-sm">Ketua 1</p>
 
               <div className="h-20" />
 
-              <p className="text-sm font-semibold">Admin</p>
+              <p className="text-sm font-semibold">Pnt. Rianto</p>
+            </div>
+
+            <div>
+              <p className="text-sm">
+                Arcawinarangun, {selectedMonthLabel} {selectedYear}
+              </p>
+
+              <p className="text-sm">Bendahara 1</p>
+
+              <div className="h-20" />
+
+              <p className="text-sm font-semibold">Pnt. Y Sutarmo</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* PRINT STYLE */}
+      {/* ======================================
+          PRINT STYLE
+      ====================================== */}
+
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 15mm;
+            size: A4 landscape;
+            margin: 8mm;
           }
 
           html,
           body {
             background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
 
           body {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+          }
+
+          table {
+            page-break-inside: auto;
+          }
+
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
           }
         }
       `}</style>

@@ -1,6 +1,29 @@
 import { createClient } from "@/lib/supabase/server";
 import CetakPersembahanBulananClient from "./CetakPersembahanBulananClient";
 
+type Block = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type Member = {
+  id: string;
+  code: string | null;
+  name: string;
+  block_id: string;
+};
+
+type Offering = {
+  id: string;
+  member_id: string;
+  amount: number;
+  date: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export default async function CetakPersembahanBulananPage() {
   const supabase = await createClient();
 
@@ -11,7 +34,7 @@ export default async function CetakPersembahanBulananPage() {
   ] = await Promise.all([
     supabase.from("blocks").select("id, code, name").order("code"),
 
-    supabase.from("members").select("id, name, block_id").order("name"),
+    supabase.from("members").select("id, code, name, block_id").order("code"),
 
     supabase
       .from("offerings")
@@ -33,9 +56,9 @@ export default async function CetakPersembahanBulananPage() {
 
   return (
     <CetakPersembahanBulananClient
-      blocks={blocks ?? []}
-      members={members ?? []}
-      offerings={offerings ?? []}
+      blocks={(blocks ?? []) as Block[]}
+      members={(members ?? []) as Member[]}
+      offerings={(offerings ?? []) as Offering[]}
     />
   );
 }

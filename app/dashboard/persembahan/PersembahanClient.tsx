@@ -647,10 +647,6 @@ export default function PersembahanClient({
                   Tanggal
                 </th>
 
-                <th className="px-6 py-4 font-semibold text-gray-700">
-                  Catatan
-                </th>
-
                 <th className="px-6 py-4 text-right font-semibold text-gray-700">
                   Aksi
                 </th>
@@ -710,16 +706,14 @@ export default function PersembahanClient({
                         )}
                       </td>
 
-                      <td className="px-6 py-4 font-semibold text-gray-900">
-                        {formatRupiah(Number(offering.amount))}
+                      <td className="px-6 py-4">
+                        <span className="whitespace-nowrap text-base font-bold text-gray-900">
+                          {formatRupiah(Number(offering.amount))}
+                        </span>
                       </td>
 
                       <td className="px-6 py-4 text-gray-700">
                         {formatDate(offering.date)}
-                      </td>
-
-                      <td className="px-6 py-4 text-gray-600">
-                        {offering.note || "-"}
                       </td>
 
                       <td className="px-6 py-4">
@@ -888,27 +882,6 @@ export default function PersembahanClient({
                   onChange={(event) => setDate(event.target.value)}
                   disabled={loading}
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
-                />
-              </div>
-
-              {/* CATATAN */}
-              <div>
-                <label
-                  htmlFor="catatan-persembahan"
-                  className="mb-2 block text-sm font-semibold text-gray-800"
-                >
-                  Catatan{" "}
-                  <span className="font-normal text-gray-500">(opsional)</span>
-                </label>
-
-                <textarea
-                  id="catatan-persembahan"
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  rows={3}
-                  placeholder="Tambahkan catatan jika diperlukan..."
-                  disabled={loading}
-                  className="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
                 />
               </div>
 

@@ -288,11 +288,24 @@ export default function PersembahanClient({
     }).format(new Date(`${value}T00:00:00`));
   }
 
+  function formatInputRupiah(value: string) {
+    const number = value.replace(/\D/g, "");
+
+    if (!number) {
+      return "";
+    }
+
+    return new Intl.NumberFormat("id-ID").format(Number(number));
+  }
+
   // =========================
   // SUBMIT FORM
   // =========================
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const cleanAmount = amount.replace(/\./g, "");
+    const numericAmount = Number(cleanAmount);
 
     const cleanCode = memberCode.trim().toUpperCase();
 
@@ -306,7 +319,7 @@ export default function PersembahanClient({
       return;
     }
 
-    if (!amount || Number(amount) <= 0) {
+    if (!cleanAmount || numericAmount <= 0) {
       setError("Nominal harus lebih dari 0.");
       return;
     }
@@ -327,7 +340,7 @@ export default function PersembahanClient({
         .from("offerings")
         .update({
           member_id: selectedMember.id,
-          amount: Number(amount),
+          amount: numericAmount,
           date,
           note: note.trim() || null,
           updated_at: new Date().toISOString(),
@@ -366,7 +379,7 @@ export default function PersembahanClient({
       .from("offerings")
       .insert({
         member_id: selectedMember.id,
-        amount: Number(amount),
+        amount: numericAmount,
         date,
         note: note.trim() || null,
       })
@@ -749,19 +762,21 @@ export default function PersembahanClient({
       </div>
 
       {/* =========================
-          MODAL TAMBAH / EDIT
-      ========================= */}
+    MODAL TAMBAH / EDIT
+========================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl">
-            {/* HEADER */}
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+            {/* =========================
+          HEADER
+      ========================= */}
             <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
                   {editingId ? "Edit Persembahan" : "Tambah Persembahan"}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-gray-500">
                   {editingId
                     ? "Perbarui data persembahan jemaat."
                     : "Masukkan kode jemaat, nominal, dan tanggal."}
@@ -772,15 +787,20 @@ export default function PersembahanClient({
                 type="button"
                 onClick={closeModal}
                 disabled={loading}
-                className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Tutup"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* FORM */}
+            {/* =========================
+          FORM
+      ========================= */}
             <form onSubmit={handleSubmit} className="space-y-5 px-6 py-6">
-              {/* KODE JEMAAT */}
+              {/* =========================
+            KODE JEMAAT
+        ========================= */}
               <div>
                 <label
                   htmlFor="kode-jemaat-persembahan"
@@ -800,52 +820,64 @@ export default function PersembahanClient({
                   placeholder="Contoh: A1 atau SK1"
                   autoComplete="off"
                   disabled={loading}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold uppercase text-gray-900 outline-none transition placeholder:font-normal placeholder:normal-case placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
+                  className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-base font-semibold uppercase tracking-wide text-gray-900 outline-none transition placeholder:font-normal placeholder:normal-case placeholder:tracking-normal placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-gray-100"
                 />
 
-                {/* MEMBER FOUND */}
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Masukkan kode resmi jemaat.
+                </p>
+
+                {/* =========================
+              MEMBER DITEMUKAN
+          ========================= */}
                 {memberCode.trim() && selectedMember && (
-                  <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-4">
+                  <div className="mt-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
                     <div className="flex items-start gap-3">
                       <CheckCircle2
                         size={20}
                         className="mt-0.5 shrink-0 text-green-600"
                       />
 
-                      <div>
-                        <p className="font-semibold text-gray-900">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-900">
                           {selectedMember.name}
                         </p>
 
-                        <p className="mt-1 text-sm text-gray-600">
-                          Kode:{" "}
-                          <span className="font-semibold">
-                            {selectedMember.code}
-                          </span>
-                        </p>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                          <p>
+                            Kode:{" "}
+                            <span className="font-semibold text-gray-900">
+                              {selectedMember.code}
+                            </span>
+                          </p>
 
-                        <p className="text-sm text-gray-600">
-                          Blok:{" "}
-                          <span className="font-semibold">
-                            {selectedBlockData
-                              ? `${selectedBlockData.code}`
-                              : "-"}
-                          </span>
-                        </p>
+                          <p>
+                            Blok:{" "}
+                            <span className="font-semibold text-gray-900">
+                              {selectedBlockData?.code ?? "-"}
+                            </span>
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* MEMBER NOT FOUND */}
+                {/* =========================
+              MEMBER TIDAK DITEMUKAN
+          ========================= */}
                 {memberCode.trim() && !selectedMember && (
-                  <p className="mt-2 text-sm text-red-600">
-                    Kode jemaat tidak ditemukan.
-                  </p>
+                  <div className="mt-2 rounded-lg bg-red-50 px-3 py-2">
+                    <p className="text-sm font-medium text-red-600">
+                      Kode jemaat tidak ditemukan.
+                    </p>
+                  </div>
                 )}
               </div>
 
-              {/* NOMINAL */}
+              {/* =========================
+            NOMINAL
+        ========================= */}
               <div>
                 <label
                   htmlFor="nominal-persembahan"
@@ -854,19 +886,34 @@ export default function PersembahanClient({
                   Nominal
                 </label>
 
-                <input
-                  id="nominal-persembahan"
-                  type="number"
-                  min="1"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  placeholder="Contoh: 100000"
-                  disabled={loading}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-500">
+                    Rp
+                  </span>
+
+                  <input
+                    id="nominal-persembahan"
+                    type="text"
+                    inputMode="numeric"
+                    value={amount}
+                    onChange={(event) => {
+                      setAmount(formatInputRupiah(event.target.value));
+                      setError("");
+                    }}
+                    placeholder="100.000"
+                    disabled={loading}
+                    className="h-14 w-full rounded-xl border border-gray-300 bg-white pl-12 pr-4 text-xl font-bold tracking-wide text-gray-900 outline-none transition placeholder:font-normal placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  />
+                </div>
+
+                <p className="mt-1.5 text-xs text-gray-500">
+                  Contoh: 100.000 atau 1.500.000
+                </p>
               </div>
 
-              {/* TANGGAL */}
+              {/* =========================
+            TANGGAL
+        ========================= */}
               <div>
                 <label
                   htmlFor="tanggal-persembahan"
@@ -881,24 +928,28 @@ export default function PersembahanClient({
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
                   disabled={loading}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-100"
+                  className="h-12 w-full rounded-xl border border-gray-300 bg-white px-4 text-base text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-gray-100"
                 />
               </div>
 
-              {/* ERROR */}
+              {/* =========================
+            ERROR
+        ========================= */}
               {error && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {error}
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm font-medium text-red-600">{error}</p>
                 </div>
               )}
 
-              {/* BUTTON */}
+              {/* =========================
+            BUTTON
+        ========================= */}
               <div className="flex justify-end gap-3 border-t border-gray-200 pt-5">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={loading}
-                  className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Batal
                 </button>
@@ -906,7 +957,7 @@ export default function PersembahanClient({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading
                     ? "Menyimpan..."

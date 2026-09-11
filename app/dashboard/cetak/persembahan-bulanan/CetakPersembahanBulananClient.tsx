@@ -642,15 +642,14 @@ export default function CetakPersembahanBulananClient({
 
           {/* PRINT TABLE */}
 
-          <table className="w-full table-fixed border-collapse text-[9px]">
+          <table className="w-full table-fixed border-collapse text-[8px]">
             <thead>
               {/* NAMA BLOK */}
-
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <th
                     key={blockData.block.id}
-                    colSpan={3}
+                    colSpan={2}
                     className="border border-black bg-yellow-300 px-1 py-1 text-center font-bold"
                   >
                     BLOK {blockData.block.code}
@@ -659,19 +658,14 @@ export default function CetakPersembahanBulananClient({
               </tr>
 
               {/* HEADER KOLOM */}
-
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <React.Fragment key={blockData.block.id}>
-                    <th className="border border-black px-1 py-1 text-center">
-                      No
-                    </th>
-
-                    <th className="border border-black px-1 py-1 text-center">
+                    <th className="border border-black px-1 py-1 text-center font-semibold">
                       Kode
                     </th>
 
-                    <th className="border border-black px-1 py-1 text-center">
+                    <th className="border border-black px-1 py-1 text-center font-semibold">
                       Nominal
                     </th>
                   </React.Fragment>
@@ -680,6 +674,7 @@ export default function CetakPersembahanBulananClient({
             </thead>
 
             <tbody>
+              {/* DATA */}
               {Array.from({
                 length: maxRows,
               }).map((_, rowIndex) => (
@@ -689,15 +684,11 @@ export default function CetakPersembahanBulananClient({
 
                     return (
                       <React.Fragment key={`${blockData.block.id}-${rowIndex}`}>
-                        <td className="border border-black px-1 py-1 text-center">
-                          {item ? rowIndex + 1 : ""}
-                        </td>
-
                         <td className="border border-black px-1 py-1 text-center font-semibold">
                           {item?.code ?? ""}
                         </td>
 
-                        <td className="border border-black px-1 py-1 text-right">
+                        <td className="border border-black px-1 py-1 text-right whitespace-nowrap">
                           {item ? formatRupiah(item.amount) : ""}
                         </td>
                       </React.Fragment>
@@ -706,19 +697,15 @@ export default function CetakPersembahanBulananClient({
                 </tr>
               ))}
 
-              {/* TOTAL BLOK */}
-
+              {/* TOTAL PER BLOK */}
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <React.Fragment key={`total-${blockData.block.id}`}>
-                    <td
-                      colSpan={2}
-                      className="border border-black px-1 py-1 text-right font-bold"
-                    >
+                    <td className="border border-black px-1 py-1 text-right font-bold">
                       TOTAL
                     </td>
 
-                    <td className="border border-black px-1 py-1 text-right font-bold">
+                    <td className="border border-black px-1 py-1 text-right font-bold whitespace-nowrap">
                       {formatRupiah(blockData.total)}
                     </td>
                   </React.Fragment>
@@ -726,10 +713,9 @@ export default function CetakPersembahanBulananClient({
               </tr>
 
               {/* GRAND TOTAL */}
-
               <tr>
                 <td
-                  colSpan={transactionsByBlock.length * 3}
+                  colSpan={transactionsByBlock.length * 2}
                   className="border border-black px-2 py-2 text-right font-bold"
                 >
                   TOTAL KESELURUHAN {formatRupiah(totalAmount)}
@@ -740,27 +726,40 @@ export default function CetakPersembahanBulananClient({
 
           {/* FOOTER */}
 
-          <div className="mt-8 grid grid-cols-2 gap-12 text-center">
+          <div className="mt-8 grid grid-cols-2 gap-16 text-center text-sm text-black">
+            {/* KETUA */}
             <div>
-              <p className="text-sm">Mengetahui</p>
+              <p>Mengetahui,</p>
+              <p>Ketua 1</p>
 
-              <p className="text-sm">Ketua 1</p>
+              <div className="flex h-24 items-center justify-center">
+                <img
+                  src="/signatures/rianto.png"
+                  alt="Tanda tangan Pnt. Rianto"
+                  className="max-h-20 w-auto object-contain"
+                />
+              </div>
 
-              <div className="h-20" />
-
-              <p className="text-sm font-semibold">Pnt. Rianto</p>
+              <p className="font-semibold">Pnt. Rianto</p>
             </div>
 
+            {/* BENDAHARA */}
             <div>
-              <p className="text-sm">
+              <p>
                 Arcawinarangun, {selectedMonthLabel} {selectedYear}
               </p>
 
-              <p className="text-sm">Bendahara 1</p>
+              <p>Bendahara 1</p>
 
-              <div className="h-20" />
+              <div className="flex h-24 items-center justify-center">
+                <img
+                  src="/signatures/sutarno.png"
+                  alt="Tanda tangan Pnt. Y Sutarmo"
+                  className="max-h-20 w-auto object-contain"
+                />
+              </div>
 
-              <p className="text-sm font-semibold">Pnt. Y Sutarmo</p>
+              <p className="font-semibold">Pnt. Y Sutarmo</p>
             </div>
           </div>
         </div>
@@ -773,7 +772,7 @@ export default function CetakPersembahanBulananClient({
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 landscape;
+            size: A4 portrait;
             margin: 8mm;
           }
 
@@ -790,12 +789,19 @@ export default function CetakPersembahanBulananClient({
           }
 
           table {
+            width: 100% !important;
+            table-layout: fixed !important;
             page-break-inside: auto;
           }
 
           tr {
             page-break-inside: avoid;
             page-break-after: auto;
+          }
+
+          th,
+          td {
+            overflow: hidden;
           }
         }
       `}</style>

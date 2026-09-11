@@ -643,8 +643,16 @@ export default function CetakPersembahanBulananClient({
           {/* PRINT TABLE */}
 
           <table className="w-full table-fixed border-collapse text-[8px]">
+            <colgroup>
+              {transactionsByBlock.map((blockData) => (
+                <React.Fragment key={blockData.block.id}>
+                  <col className="w-[6.666%]" />
+                  <col className="w-[10%]" />
+                </React.Fragment>
+              ))}
+            </colgroup>
+
             <thead>
-              {/* NAMA BLOK */}
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <th
@@ -657,7 +665,6 @@ export default function CetakPersembahanBulananClient({
                 ))}
               </tr>
 
-              {/* HEADER KOLOM */}
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <React.Fragment key={blockData.block.id}>
@@ -674,10 +681,7 @@ export default function CetakPersembahanBulananClient({
             </thead>
 
             <tbody>
-              {/* DATA */}
-              {Array.from({
-                length: maxRows,
-              }).map((_, rowIndex) => (
+              {Array.from({ length: maxRows }).map((_, rowIndex) => (
                 <tr key={rowIndex}>
                   {transactionsByBlock.map((blockData) => {
                     const item = blockData.items[rowIndex];
@@ -688,7 +692,7 @@ export default function CetakPersembahanBulananClient({
                           {item?.code ?? ""}
                         </td>
 
-                        <td className="border border-black px-1 py-1 text-right whitespace-nowrap">
+                        <td className="border border-black px-1 py-1 text-right text-[9px] font-semibold whitespace-nowrap">
                           {item ? formatRupiah(item.amount) : ""}
                         </td>
                       </React.Fragment>
@@ -697,7 +701,6 @@ export default function CetakPersembahanBulananClient({
                 </tr>
               ))}
 
-              {/* TOTAL PER BLOK */}
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <React.Fragment key={`total-${blockData.block.id}`}>
@@ -705,18 +708,17 @@ export default function CetakPersembahanBulananClient({
                       TOTAL
                     </td>
 
-                    <td className="border border-black px-1 py-1 text-right font-bold whitespace-nowrap">
+                    <td className="border border-black px-1 py-1 text-right text-[9px] font-bold whitespace-nowrap">
                       {formatRupiah(blockData.total)}
                     </td>
                   </React.Fragment>
                 ))}
               </tr>
 
-              {/* GRAND TOTAL */}
               <tr>
                 <td
                   colSpan={transactionsByBlock.length * 2}
-                  className="border border-black px-2 py-2 text-right font-bold"
+                  className="border border-black px-2 py-2 text-right text-[9px] font-bold"
                 >
                   TOTAL KESELURUHAN {formatRupiah(totalAmount)}
                 </td>
@@ -746,7 +748,7 @@ export default function CetakPersembahanBulananClient({
             {/* BENDAHARA */}
             <div>
               <p>
-                Arcawinarangun, {selectedMonthLabel} {selectedYear}
+                Arcawinangun, {selectedMonthLabel} {selectedYear}
               </p>
 
               <p>Bendahara 1</p>
@@ -754,12 +756,12 @@ export default function CetakPersembahanBulananClient({
               <div className="flex h-24 items-center justify-center">
                 <img
                   src="/signatures/sutarno.png"
-                  alt="Tanda tangan Pnt. Y Sutarmo"
+                  alt="Tanda tangan Pnt. Y Sutarno"
                   className="max-h-20 w-auto object-contain"
                 />
               </div>
 
-              <p className="font-semibold">Pnt. Y Sutarmo</p>
+              <p className="font-semibold">Pnt. Y Sutarno</p>
             </div>
           </div>
         </div>

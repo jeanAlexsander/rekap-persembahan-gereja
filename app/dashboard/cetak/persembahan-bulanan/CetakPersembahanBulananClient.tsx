@@ -691,9 +691,10 @@ export default function CetakPersembahanBulananClient({
                         <td className="border border-black px-1 py-1 text-center font-semibold">
                           {item?.code ?? ""}
                         </td>
-
-                        <td className="border border-black px-1 py-1 text-right text-[9px] font-semibold whitespace-nowrap">
-                          {item ? formatRupiah(item.amount) : ""}
+                        <td className="border border-black px-1 py-1 text-center">
+                          <span className="inline-block min-w-[70px] text-left text-[9px] font-semibold whitespace-nowrap">
+                            {item ? formatRupiah(item.amount) : ""}
+                          </span>
                         </td>
                       </React.Fragment>
                     );
@@ -708,8 +709,10 @@ export default function CetakPersembahanBulananClient({
                       TOTAL
                     </td>
 
-                    <td className="border border-black px-1 py-1 text-right text-[9px] font-bold whitespace-nowrap">
-                      {formatRupiah(blockData.total)}
+                    <td className="border border-black px-1 py-1 text-center">
+                      <span className="inline-block min-w-[70px] text-left text-[9px] font-bold whitespace-nowrap">
+                        {formatRupiah(blockData.total)}
+                      </span>
                     </td>
                   </React.Fragment>
                 ))}

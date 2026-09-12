@@ -705,7 +705,7 @@ export default function CetakPersembahanBulananClient({
               <tr>
                 {transactionsByBlock.map((blockData) => (
                   <React.Fragment key={`total-${blockData.block.id}`}>
-                    <td className="border border-black px-1 py-1 text-right font-bold">
+                    <td className="border border-black px-1 py-1 text-center font-bold">
                       TOTAL
                     </td>
 

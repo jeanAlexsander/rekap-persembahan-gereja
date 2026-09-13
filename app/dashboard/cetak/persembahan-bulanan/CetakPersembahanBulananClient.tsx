@@ -691,10 +691,18 @@ export default function CetakPersembahanBulananClient({
                         <td className="border border-black px-1 py-1 text-center font-semibold">
                           {item?.code ?? ""}
                         </td>
-                        <td className="border border-black px-1 py-1 text-center">
-                          <span className="inline-block min-w-[70px] text-left text-[9px] font-semibold whitespace-nowrap">
-                            {item ? formatRupiah(item.amount) : ""}
-                          </span>
+                        <td className="border border-black px-1 py-1">
+                          {item && (
+                            <div className="grid grid-cols-[auto_1fr] items-center gap-1 text-[9px] font-semibold leading-none">
+                              <span className="text-left">Rp</span>
+
+                              <span className="text-right whitespace-nowrap">
+                                {new Intl.NumberFormat("id-ID").format(
+                                  item.amount,
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </td>
                       </React.Fragment>
                     );
@@ -709,10 +717,16 @@ export default function CetakPersembahanBulananClient({
                       TOTAL
                     </td>
 
-                    <td className="border border-black px-1 py-1 text-center">
-                      <span className="inline-block min-w-[70px] text-left text-[9px] font-bold whitespace-nowrap">
-                        {formatRupiah(blockData.total)}
-                      </span>
+                    <td className="border border-black px-1 py-1">
+                      <div className="grid grid-cols-[auto_1fr] items-center gap-1 text-[9px] font-bold leading-none">
+                        <span className="text-left">Rp</span>
+
+                        <span className="text-right whitespace-nowrap">
+                          {new Intl.NumberFormat("id-ID").format(
+                            blockData.total,
+                          )}
+                        </span>
+                      </div>
                     </td>
                   </React.Fragment>
                 ))}

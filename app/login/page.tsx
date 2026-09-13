@@ -38,11 +38,21 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-lg">
         {/* Header */}
-        <div className="mb-7">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Login</h1>
+        <div className="mb-6 flex justify-center">
+          <img
+            src="/logo-gereja.jpg"
+            alt="Logo Gereja"
+            className="h-20 w-20 object-contain"
+          />
+        </div>
+
+        <div className="mb-7 text-center">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Masuk ke Dashboard
+          </h1>
 
           <p className="mt-2 text-sm leading-6 text-gray-600">
-            Silakan login untuk mengakses dashboard keuangan.
+            Silakan masuk untuk mengelola data keuangan gereja.
           </p>
         </div>
 
@@ -98,7 +108,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
           >
             {loading ? "Memproses..." : "Login"}
           </button>
